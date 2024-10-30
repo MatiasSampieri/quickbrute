@@ -22,11 +22,12 @@ type Request struct {
 	Params  map[string]string `yaml:"params,omitempty"`
 }
 
-type Params struct {
-	Type string `yaml:"type"`
-	From int    `yaml:"from,omitempty"`
-	To   int    `yaml:"to,omitempty"`
-	File string `yaml:"file,omitempty"`
+type Param struct {
+	Type string   `yaml:"type"`
+	From int      `yaml:"from,omitempty"`
+	To   int      `yaml:"to,omitempty"`
+	File string   `yaml:"file,omitempty"`
+	Dict []string `yaml:"dict,omitempty"`
 }
 
 type Response struct {
@@ -41,12 +42,11 @@ type Criteria struct {
 }
 
 type Config struct {
-	Request  Request           `yaml:"request"`
-	Params   map[string]Params `yaml:"params,omitempty"`
-	Criteria Criteria          `yaml:"criteria,omitempty"`
-	Helpers  []string          `yaml:"helpers,omitempty"`
+	Request  Request          `yaml:"request"`
+	Params   map[string]Param `yaml:"params,omitempty"`
+	Criteria Criteria         `yaml:"criteria,omitempty"`
+	Helpers  []string         `yaml:"helpers,omitempty"`
 }
-
 
 func loadConfig(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
@@ -62,7 +62,6 @@ func loadConfig(path string) (*Config, error) {
 
 	return &config, nil
 }
-
 
 func handleFlags() (*Flags, bool) {
 	var flags Flags
@@ -82,7 +81,6 @@ func handleFlags() (*Flags, bool) {
 
 	return &flags, false
 }
-
 
 func loadParams(config *Config) []string {
 	var paramNames []string

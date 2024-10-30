@@ -36,7 +36,7 @@ message Criteria {
 
 message Config {
     Request request = 1;
-    Response criteria = 2;
+    Criteria criteria = 2;
     map<string, Params> params = 3;
 }  
 

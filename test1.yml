@@ -1,12 +1,12 @@
 request:
   method: POST
   url: http://chl-13dbb1be-87a2-488a-982e-2cb3f7e191ce-apagar-ia.softwareseguro.com.ar/
-  body: $test$ddsada
+  body: $id$ddsada
   params:
-    tt: $test$
+    tt: $id$
 
 params:
-  test:
+  id:
     type: RANGE
     from: 1
     to: 20

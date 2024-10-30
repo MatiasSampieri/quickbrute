@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -12,40 +13,67 @@ import (
 func main() {
 	var config *Config
 	var err error
+
+	var netStat NetStatus
+
 	flags, helper := handleFlags()
 
 	if helper {
-		waitForMainInstance(flags.Port)
+		netStat.isHelper = true
+		config, netStat.Parent = helperMode(flags)
+
 	} else {
 		config, err = loadConfig(flags.ConfigFile)
 		if err != nil {
 			fmt.Println("ERROR: Couln't load config file!, please check the format")
 			return
 		}
+
+		if config.Helpers != nil {
+			netStat.Helpers = connectToHelpers(config.Helpers, flags.Port)
+			startHelpers(netStat.Helpers, config, flags)
+		}	
+	}
+
+	if config == nil {
+		fmt.Println("ERROR: Invalid config, aborting")
+		return
 	}
 
 	paramNames := loadParams(config)
-
-	//var helpers []net.Conn
-	if config.Helpers != nil {
-		connectToHelpers(config.Helpers, flags.Port)
-	}
-
-	start(config, flags, paramNames)
+	fmt.Println("ADFGH:", paramNames[0])
+	//start(config, flags, paramNames, netStat)
 }
 
 
-func start(config *Config, flags *Flags, paramNames []string) {
+func helperMode(flags *Flags) (*Config, net.Conn) {
+	conn := waitForMainInstance(flags.Port)
+	if conn == nil {
+		return nil, nil
+	}
+
+	config := waitForRemoteStart(conn, flags)
+	if config == nil {
+		fmt.Println("ERROR: Couln't load remote config! aborting")
+		return nil, nil
+	}
+
+	return config, conn
+}
+
+
+func start(config *Config, flags *Flags, paramNames []string, netStat NetStatus) {
 	firstParam := config.Params[paramNames[0]]
 	if firstParam.Type == "RANGE" {
 		fmt.Printf("Found RANGE [%d, %d] param: %s\n", firstParam.From, firstParam.To, paramNames[0])
 		runRange(config, flags, paramNames[0], firstParam.From, firstParam.To)
 		return
 	}
-	if firstParam.Type == "DICTIONARY" {
+	if firstParam.Type == "DICT" {
 		return
 	}
 }
+
 
 func runRange(config *Config, flags *Flags, name string, from int, to int) {
 	batches := (to-from) / flags.BatchSize
@@ -72,6 +100,7 @@ func runRange(config *Config, flags *Flags, name string, from int, to int) {
 		waitGroup.Wait()
 	}
 }
+
 
 func makeRequest(request Request, paramName string, paramValue string) {
 	URL := strings.ReplaceAll(request.URL, fmt.Sprintf("$%s$", paramName), paramValue)
