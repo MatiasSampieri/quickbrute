@@ -223,7 +223,7 @@ func askForHelp(addr string, port int) net.Conn {
 		return nil
 	}
 
-	fmt.Println("Connected succesfully to helper!")
+	fmt.Println("Successfully connected to helper!")
 
 	return conn
 }
@@ -239,10 +239,4 @@ func connectToHelpers(helpers []string, port int) []net.Conn {
 	}
 
 	return connections
-}
-
-func startHelpers(helpers []net.Conn, config *Config, flags *Flags) {
-	for _, helper := range helpers {
-		sendStart(helper, config, flags)
-	}
 }

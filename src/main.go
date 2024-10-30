@@ -31,7 +31,6 @@ func main() {
 
 		if config.Helpers != nil {
 			netStat.Helpers = connectToHelpers(config.Helpers, flags.Port)
-			startHelpers(netStat.Helpers, config, flags)
 		}	
 	}
 
@@ -41,8 +40,7 @@ func main() {
 	}
 
 	paramNames := loadParams(config)
-	fmt.Println("ADFGH:", paramNames[0])
-	//start(config, flags, paramNames, netStat)
+	start(config, flags, paramNames, netStat)
 }
 
 
@@ -66,6 +64,11 @@ func start(config *Config, flags *Flags, paramNames []string, netStat NetStatus)
 	firstParam := config.Params[paramNames[0]]
 	if firstParam.Type == "RANGE" {
 		fmt.Printf("Found RANGE [%d, %d] param: %s\n", firstParam.From, firstParam.To, paramNames[0])
+
+		if !netStat.isHelper && netStat.Helpers != nil && len(netStat.Helpers) > 0 {
+			splitWorkRange(netStat, config, flags, &firstParam, paramNames[0])
+		}
+
 		runRange(config, flags, paramNames[0], firstParam.From, firstParam.To)
 		return
 	}
@@ -138,4 +141,30 @@ func makeRequest(request Request, paramName string, paramValue string) {
 	}
 
 	fmt.Println(res.Status)
+}
+
+
+func splitWorkRange(netStat NetStatus, config *Config, flags *Flags, param *Param, paramName string) {
+	helperCount := len(netStat.Helpers) + 1
+	paramRange := param.To - param.From
+	step := paramRange / helperCount
+	extra := paramRange % helperCount
+
+	startFrom := param.From + step + extra
+	param.To = startFrom
+	for _, helper := range netStat.Helpers {
+		helperConfig := *config
+
+		helperParam := helperConfig.Params[paramName]
+		helperParam.From = startFrom
+		helperParam.To = startFrom + step
+		helperConfig.Params[paramName] = helperParam
+
+		sendStart(helper, &helperConfig, flags)
+
+		startFrom += step
+	} 
+
+	fmt.Println("Work split between", helperCount-1, "workers and this instance")
+	fmt.Printf("New range [%d, %d] for param %s on this instance\n", param.From, param.To, paramName)
 }
