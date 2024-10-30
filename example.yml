@@ -1,0 +1,37 @@
+request:
+  method: GET
+  url: http://test/$prodid$
+  params:
+    username: Test
+    password: lol
+    id: "$id$"
+  headers:
+    cookie: "sessionid=ab3235bac5"
+  body: '{"user":"test", "bruh":55}'
+
+params:
+  prodid:
+    type: RANGE
+    from: 1
+    to: 10000
+  id:
+    type: RANGE
+    from: 1
+    to: 333
+  bruh:
+    type: DICTIONARY
+    file: dict.txt
+
+criteria:
+  type: STOP | LOG
+  response:
+    status: 200
+    headers:
+      cookie: "sesion=sa4d65541a"
+    body:
+      'sjdhaksjdh'
+
+helpers:
+  - 192.168.1.1
+  - 123.35.24.1
+  
