@@ -73,12 +73,51 @@ func start(config *Config, flags *Flags, paramNames []string, netStat NetStatus)
 		return
 	}
 	if firstParam.Type == "DICT" {
+		dict := firstParam.Dict
+		fmt.Printf("Found DICT [%d] param: %s\n", len(dict), paramNames[0])
+
+		if !netStat.isHelper && netStat.Helpers != nil && len(netStat.Helpers) > 0 {
+			dict = splitWorkDict(netStat, config, flags, dict, paramNames[0])
+		}
+
+		runDict(config, flags, paramNames[0], dict)
 		return
 	}
 }
 
 
-func runRange(config *Config, flags *Flags, name string, from int, to int) {
+func runDict(config *Config, flags *Flags, paramName string, dict []string) {
+	dictCount := len(dict)
+	batches := dictCount / flags.BatchSize
+	if batches < 1 {
+		batches = 1
+	}
+
+	for i := 0; i < batches; i++ {
+		var waitGroup sync.WaitGroup
+		
+		batchStart := i * flags.BatchSize
+		batchEnd := (i+1) * flags.BatchSize
+		if batchEnd > dictCount {
+			batchEnd = dictCount
+		} 
+
+		for _, elem := range dict[batchStart:batchEnd] {
+			waitGroup.Add(1)
+			go func(val string) {
+				fmt.Printf("[%s]: ", val)
+				makeRequest(config.Request, paramName, val)
+				waitGroup.Done()
+			}(elem)
+		}
+
+		waitGroup.Wait()
+	}
+
+}
+
+
+func runRange(config *Config, flags *Flags, paramName string, from int, to int) {
 	batches := (to-from) / flags.BatchSize
 	if batches < 1 {
 		batches = 1
@@ -91,7 +130,7 @@ func runRange(config *Config, flags *Flags, name string, from int, to int) {
 		for ; iter <= to; iter++ {
 			waitGroup.Add(1)
 			go func(i int) {
-				makeRequest(config.Request, name, strconv.Itoa(i))
+				makeRequest(config.Request, paramName, strconv.Itoa(i))
 				waitGroup.Done()
 			}(iter)
 
@@ -166,5 +205,30 @@ func splitWorkRange(netStat NetStatus, config *Config, flags *Flags, param *Para
 	} 
 
 	fmt.Println("Work split between", helperCount-1, "workers and this instance")
-	fmt.Printf("New range [%d, %d] for param %s on this instance\n", param.From, param.To, paramName)
+	fmt.Printf("New range [%d, %d] for RANGE param %s on this instance\n", param.From, param.To, paramName)
+}
+
+
+func splitWorkDict(netStat NetStatus, config *Config, flags *Flags, dict []string, paramName string) []string {
+	helperCount := len(netStat.Helpers) + 1
+	dictCount := len(dict)
+	partitionSize := dictCount / helperCount
+	extra := dictCount % helperCount
+
+	localDict := dict[0:partitionSize+extra]
+	for i, helper := range netStat.Helpers {
+		helperConfig := *config
+
+		helperParam := helperConfig.Params[paramName]
+		from := partitionSize * (i+1) + extra
+		helperParam.Dict = dict[from:from+partitionSize]
+		helperConfig.Params[paramName] = helperParam
+
+		sendStart(helper, &helperConfig, flags)
+	}
+
+	fmt.Println("Work split between", helperCount-1, "workers and this instance")
+	fmt.Printf("New size [%d] for DICT param %s on this instance\n", partitionSize+extra, paramName)
+
+	return localDict
 }

@@ -205,9 +205,10 @@ func sendStart(conn net.Conn, config *Config, flags *Flags) bool {
 }
 
 func askForHelp(addr string, port int) net.Conn {
-	fmt.Println("Attempting connection with helper:", addr)
+	fmt.Println("Attempting connection with helper [timeout 2s]:", addr)
 
-	conn, err := net.Dial("tcp", addr+":"+strconv.Itoa(port))
+	dialer := net.Dialer{Timeout: time.Second * 2}
+	conn, err := dialer.Dial("tcp", addr+":"+strconv.Itoa(port))
 	if err != nil {
 		fmt.Println("ERROR: Could not connect to helper, skipping it")
 		return nil

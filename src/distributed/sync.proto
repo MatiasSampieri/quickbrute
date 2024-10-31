@@ -41,7 +41,7 @@ message Config {
 }  
 
 message SyncMessage {
-    // HELLO, ACK, BUSY, START, STOP, SUCCESS, REPORT
+    // HELLO, ACK, START, STOP, SUCCESS, REPORT
     string action = 1;
     Config config = 2;
     Flags flags = 3;
