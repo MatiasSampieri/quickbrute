@@ -2,9 +2,12 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -31,7 +34,7 @@ func main() {
 
 		if config.Helpers != nil {
 			netStat.Helpers = connectToHelpers(config.Helpers, flags.Port)
-		}	
+		}
 	}
 
 	if config == nil {
@@ -42,7 +45,6 @@ func main() {
 	paramNames := loadParams(config)
 	start(config, flags, paramNames, netStat)
 }
-
 
 func helperMode(flags *Flags) (*Config, net.Conn) {
 	conn := waitForMainInstance(flags.Port)
@@ -59,9 +61,9 @@ func helperMode(flags *Flags) (*Config, net.Conn) {
 	return config, conn
 }
 
-
 func start(config *Config, flags *Flags, paramNames []string, netStat NetStatus) {
 	firstParam := config.Params[paramNames[0]]
+
 	if firstParam.Type == "RANGE" {
 		fmt.Printf("Found RANGE [%d, %d] param: %s\n", firstParam.From, firstParam.To, paramNames[0])
 
@@ -71,6 +73,18 @@ func start(config *Config, flags *Flags, paramNames []string, netStat NetStatus)
 
 		runRange(config, flags, paramNames[0], firstParam.From, firstParam.To)
 		return
+	}
+	if firstParam.Type == "FILE" {
+		data, err := os.ReadFile(firstParam.File)
+		if err != nil {
+			fmt.Println("ERROR: Could not read file, aborting")
+			return
+		}
+
+		lines := strings.Split(string(data), "\n")
+
+		firstParam.Dict = lines
+		firstParam.Type = "DICT"
 	}
 	if firstParam.Type == "DICT" {
 		dict := firstParam.Dict
@@ -83,8 +97,9 @@ func start(config *Config, flags *Flags, paramNames []string, netStat NetStatus)
 		runDict(config, flags, paramNames[0], dict)
 		return
 	}
-}
 
+	fmt.Println("ERROR: No valid param type found, aborting")
+}
 
 func runDict(config *Config, flags *Flags, paramName string, dict []string) {
 	dictCount := len(dict)
@@ -95,12 +110,12 @@ func runDict(config *Config, flags *Flags, paramName string, dict []string) {
 
 	for i := 0; i < batches; i++ {
 		var waitGroup sync.WaitGroup
-		
+
 		batchStart := i * flags.BatchSize
-		batchEnd := (i+1) * flags.BatchSize
+		batchEnd := (i + 1) * flags.BatchSize
 		if batchEnd > dictCount {
 			batchEnd = dictCount
-		} 
+		}
 
 		for _, elem := range dict[batchStart:batchEnd] {
 			waitGroup.Add(1)
@@ -116,9 +131,8 @@ func runDict(config *Config, flags *Flags, paramName string, dict []string) {
 
 }
 
-
 func runRange(config *Config, flags *Flags, paramName string, from int, to int) {
-	batches := (to-from) / flags.BatchSize
+	batches := (to - from) / flags.BatchSize
 	if batches < 1 {
 		batches = 1
 	}
@@ -134,7 +148,7 @@ func runRange(config *Config, flags *Flags, paramName string, from int, to int) 
 				waitGroup.Done()
 			}(iter)
 
-			if iter % flags.BatchSize == 0 {
+			if iter%flags.BatchSize == 0 {
 				break
 			}
 		}
@@ -143,14 +157,13 @@ func runRange(config *Config, flags *Flags, paramName string, from int, to int) 
 	}
 }
 
-
-func makeRequest(request Request, paramName string, paramValue string) {
+func makeRequest(request Request, paramName string, paramValue string) *http.Response {
 	URL := strings.ReplaceAll(request.URL, fmt.Sprintf("$%s$", paramName), paramValue)
 	body := strings.ReplaceAll(request.Body, fmt.Sprintf("$%s$", paramName), paramValue)
 
 	preparedUrl, err := url.Parse(URL)
 	if err != nil {
-		return
+		return nil
 	}
 
 	// Parse params
@@ -164,7 +177,7 @@ func makeRequest(request Request, paramName string, paramValue string) {
 	// Create request
 	req, err := http.NewRequest(request.Method, preparedUrl.String(), strings.NewReader(body))
 	if err != nil {
-		return
+		return nil
 	}
 
 	// Parse headers
@@ -176,12 +189,12 @@ func makeRequest(request Request, paramName string, paramValue string) {
 	client := &http.Client{}
 	res, err := client.Do(req)
 	if err != nil {
-		return
+		return nil
 	}
 
-	fmt.Println(res.Status)
+	fmt.Printf("[%s: %s] %s", paramName, paramValue, res.Status)
+	return res
 }
-
 
 func splitWorkRange(netStat NetStatus, config *Config, flags *Flags, param *Param, paramName string) {
 	helperCount := len(netStat.Helpers) + 1
@@ -202,12 +215,11 @@ func splitWorkRange(netStat NetStatus, config *Config, flags *Flags, param *Para
 		sendStart(helper, &helperConfig, flags)
 
 		startFrom += step
-	} 
+	}
 
 	fmt.Println("Work split between", helperCount-1, "workers and this instance")
 	fmt.Printf("New range [%d, %d] for RANGE param %s on this instance\n", param.From, param.To, paramName)
 }
-
 
 func splitWorkDict(netStat NetStatus, config *Config, flags *Flags, dict []string, paramName string) []string {
 	helperCount := len(netStat.Helpers) + 1
@@ -215,13 +227,13 @@ func splitWorkDict(netStat NetStatus, config *Config, flags *Flags, dict []strin
 	partitionSize := dictCount / helperCount
 	extra := dictCount % helperCount
 
-	localDict := dict[0:partitionSize+extra]
+	localDict := dict[0 : partitionSize+extra]
 	for i, helper := range netStat.Helpers {
 		helperConfig := *config
 
 		helperParam := helperConfig.Params[paramName]
-		from := partitionSize * (i+1) + extra
-		helperParam.Dict = dict[from:from+partitionSize]
+		from := partitionSize*(i+1) + extra
+		helperParam.Dict = dict[from : from+partitionSize]
 		helperConfig.Params[paramName] = helperParam
 
 		sendStart(helper, &helperConfig, flags)
@@ -231,4 +243,40 @@ func splitWorkDict(netStat NetStatus, config *Config, flags *Flags, dict []strin
 	fmt.Printf("New size [%d] for DICT param %s on this instance\n", partitionSize+extra, paramName)
 
 	return localDict
+}
+
+func checkCriteria(response *http.Response, criteria *Response) bool {
+	if criteria.Status != 0 {
+		if criteria.Status != response.StatusCode {
+			return false
+		}
+	}
+
+	if criteria.Body != "" {
+		body, err := io.ReadAll(response.Body)
+
+		if err != nil {
+			return false
+		}
+
+		match, err := regexp.MatchString(criteria.Body, string(body))
+		if err != nil || !match {
+			return false
+		}
+	}
+
+	if len(criteria.Headers) > 0 {
+		for name, value := range criteria.Headers {
+			resVal, ok := response.Header[name] 
+			if !ok {
+				return false
+			}
+
+			if strings.Join(resVal, ", ") != value {
+				return false
+			}
+		}
+	}
+
+	return true
 }
