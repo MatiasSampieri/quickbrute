@@ -139,22 +139,37 @@ func runRange(config *Config, flags *Flags, paramName string, from int, to int) 
 
 	iter := from
 	for batch := 1; batch <= batches; batch++ {
-		var waitGroup sync.WaitGroup
+		responseCh := make(chan Response, flags.BatchSize)
+		responses := 0
 
 		for ; iter <= to; iter++ {
-			waitGroup.Add(1)
-			go func(i int) {
-				makeRequest(config.Request, paramName, strconv.Itoa(i))
-				waitGroup.Done()
-			}(iter)
+			go iterFunc(config, paramName, strconv.Itoa(iter), responseCh, &responses)
 
 			if iter%flags.BatchSize == 0 {
 				break
 			}
 		}
 
-		waitGroup.Wait()
+		// TODO: Finish this
+		for i := 0; i < responses; i++ {
+			batchResult := <- responseCh
+		}
 	}
+}
+
+func iterFunc(config *Config, paramName string, value string, channel chan Response, resCount *int) {
+	res := makeRequest(config.Request, paramName, value)
+	ok := checkCriteria(res, &config.Criteria.Response)
+
+	if ok {
+		if config.Criteria.Type == "STOP" {
+
+		} else if config.Criteria.Type ==  "LOG" {
+
+		}
+	}
+
+	*resCount++
 }
 
 func makeRequest(request Request, paramName string, paramValue string) *http.Response {
