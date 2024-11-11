@@ -139,12 +139,13 @@ func runRange(config *Config, flags *Flags, paramName string, from int, to int) 
 
 	iter := from
 	for batch := 1; batch <= batches; batch++ {
-		responseCh := make(chan Response, flags.BatchSize)
+		responseCh := make(chan *Response, flags.BatchSize)
 		responses := 0
 
 		for ; iter <= to; iter++ {
-			go iterFunc(config, paramName, strconv.Itoa(iter), responseCh, &responses)
-
+			go iterFunc(config, paramName, strconv.Itoa(iter), responseCh)
+			responses++
+			
 			if iter%flags.BatchSize == 0 {
 				break
 			}
@@ -157,7 +158,7 @@ func runRange(config *Config, flags *Flags, paramName string, from int, to int) 
 	}
 }
 
-func iterFunc(config *Config, paramName string, value string, channel chan Response, resCount *int) {
+func iterFunc(config *Config, paramName string, value string, channel chan Response) {
 	res := makeRequest(config.Request, paramName, value)
 	ok := checkCriteria(res, &config.Criteria.Response)
 
@@ -169,7 +170,6 @@ func iterFunc(config *Config, paramName string, value string, channel chan Respo
 		}
 	}
 
-	*resCount++
 }
 
 func makeRequest(request Request, paramName string, paramValue string) *http.Response {
