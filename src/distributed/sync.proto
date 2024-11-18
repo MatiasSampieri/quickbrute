@@ -25,8 +25,15 @@ message Params {
 
 message Response {
     int32 status = 1;
-    string body = 2;
-    map<string, string> headers = 3;
+    string statusTxt = 2;
+    string body = 3;
+    string protoVer = 4;
+    map<string, string> headers = 5;
+}
+
+message Log {
+    int32 count = 1;
+    repeated Response reponses = 2;
 }
 
 message Criteria {
@@ -41,9 +48,9 @@ message Config {
 }  
 
 message SyncMessage {
-    // HELLO, ACK, START, STOP, SUCCESS, REPORT
+    // HELLO, ACK, START, STOP, SUCCESS, LOG
     string action = 1;
     Config config = 2;
-    Flags flags = 3;
-    Response response = 4;
+    Flags flags = 3; // TODO: Remove, useless
+    Log responseLog = 4;
 }

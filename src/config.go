@@ -12,33 +12,7 @@ type Flags struct {
 	BatchSize  int
 	ConfigFile string
 	Port       int
-}
-
-type Request struct {
-	Method  string            `yaml:"method"`
-	URL     string            `yaml:"url"`
-	Body    string            `yaml:"body,omitempty"`
-	Headers map[string]string `yaml:"headers,omitempty"`
-	Params  map[string]string `yaml:"params,omitempty"`
-}
-
-type Param struct {
-	Type string   `yaml:"type"`
-	From int      `yaml:"from,omitempty"`
-	To   int      `yaml:"to,omitempty"`
-	File string   `yaml:"file,omitempty"`
-	Dict []string `yaml:"dict,omitempty"`
-}
-
-type Response struct {
-	Status  int               `yaml:"status,omitempty"`
-	Body    string            `yaml:"body,omitempty"`
-	Headers map[string]string `yaml:"headers,omitempty"`
-}
-
-type Criteria struct {
-	Type     string   `yaml:"type"`
-	Response Response `yaml:"reponse"`
+	OutFile    string
 }
 
 type Config struct {
@@ -46,6 +20,7 @@ type Config struct {
 	Params   map[string]Param `yaml:"params,omitempty"`
 	Criteria Criteria         `yaml:"criteria,omitempty"`
 	Helpers  []string         `yaml:"helpers,omitempty"`
+	Logger   Logger
 }
 
 func loadConfig(path string) (*Config, error) {
@@ -68,6 +43,7 @@ func handleFlags() (*Flags, bool) {
 
 	flag.IntVar(&flags.BatchSize, "b", 500, "Set amount of parallel requests")
 	flag.IntVar(&flags.Port, "p", 7575, "Set port for inter-node communication")
+	flag.StringVar(&flags.OutFile, "o", "out.log", "Set the output file for criteria results")
 	flag.Parse()
 
 	args := flag.Args()
@@ -91,7 +67,7 @@ func loadParams(config *Config) []string {
 
 	paramNames = make([]string, len(config.Params))
 	index := 0
-	for name, _ := range config.Params {
+	for name := range config.Params {
 		paramNames[index] = name
 		index++
 	}

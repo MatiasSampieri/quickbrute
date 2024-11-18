@@ -2,18 +2,21 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"net"
+	"net/http"
 	"qdbf/distributed"
 	"strconv"
+	"strings"
 	"time"
 
 	"google.golang.org/protobuf/proto"
 )
 
 type NetStatus struct {
-	isHelper bool
-	Helpers  []net.Conn
-	Parent   net.Conn
+	IsHelper  bool
+	Helpers   []net.Conn
+	Parent    net.Conn
 }
 
 func checkSync(conn net.Conn, timeout time.Duration) *distributed.SyncMessage {
@@ -67,6 +70,7 @@ func waitForMainInstance(port int) net.Conn {
 		conn, err = listener.Accept()
 		if err != nil {
 			fmt.Println("ERROR: Could not establish connection!")
+			continue
 		}
 
 		break
@@ -86,6 +90,10 @@ func waitForMainInstance(port int) net.Conn {
 	}
 
 	return conn
+}
+
+func sendStop() {
+	// TODO: implement
 }
 
 func waitForRemoteStart(conn net.Conn, flags *Flags) *Config {
@@ -131,7 +139,7 @@ func waitForRemoteStart(conn net.Conn, flags *Flags) *Config {
 		Criteria: criteria,
 	}
 
-	flags.BatchSize = int(msg.GetFlags().GetBatchSize())
+	//flags.BatchSize = int(msg.GetFlags().GetBatchSize())
 
 	fmt.Println("Recieved config from main instance!")
 	sendAction(conn, "ACK")
@@ -240,4 +248,49 @@ func connectToHelpers(helpers []string, port int) []net.Conn {
 	}
 
 	return connections
+}
+
+func helperMode(flags *Flags) (*Config, net.Conn) {
+	conn := waitForMainInstance(flags.Port)
+	if conn == nil {
+		return nil, nil
+	}
+
+	config := waitForRemoteStart(conn, flags)
+	if config == nil {
+		fmt.Println("ERROR: Couln't load remote config! aborting")
+		return nil, nil
+	}
+
+	return config, conn
+}
+
+func sendLog(conn net.Conn, responses []*http.Response) {
+	count := int32(len(responses))
+	convertedResponses := make([]*distributed.Response, count)
+
+	for i, res := range responses {
+		body, _ := io.ReadAll(res.Body)
+
+		convertedResponses[i] = &distributed.Response{
+			Status: int32(res.StatusCode),
+			StatusTxt: res.Status,
+			ProtoVer: res.Proto,
+			Body: string(body),
+		}
+
+		for name, value := range res.Header {
+			convertedResponses[i].Headers[name] = strings.Join(value, ", ")
+		}
+	}
+
+	logMessage := distributed.SyncMessage {
+		Action: "LOG",
+		ResponseLog: &distributed.Log{
+			Count: count,
+			Reponses: convertedResponses,
+		},
+	}
+
+	sendSync(conn, &logMessage)
 }
