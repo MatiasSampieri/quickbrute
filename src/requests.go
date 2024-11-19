@@ -27,7 +27,7 @@ type Response struct {
 
 type Criteria struct {
 	Type     string   `yaml:"type"`
-	Response Response `yaml:"reponse"`
+	Response Response `yaml:"response"`
 }
 
 type Param struct {
