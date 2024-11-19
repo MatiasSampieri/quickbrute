@@ -40,6 +40,7 @@ func (logger *NetLogger) Commit() {
 	}
 
 	sendLog(logger.Network.Parent, logger.LogBuffer)
+	fmt.Println("LOG: Log sent to parent!")
 	logger.LogBuffer = nil
 }
 

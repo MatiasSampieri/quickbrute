@@ -132,7 +132,9 @@ func runDict(config *Config, flags *Flags, netStat *NetStatus, paramName string,
 		config.Logger.Commit()
 		responseCh.Close()
 	}
+
 	cancel()
+	wg.Wait()
 }
 
 func runRange(config *Config, flags *Flags, netStat *NetStatus, paramName string, from int, to int) {
@@ -170,6 +172,7 @@ func runRange(config *Config, flags *Flags, netStat *NetStatus, paramName string
 		config.Logger.Commit()
 		responseCh.Close()
 	}
+
 	cancel()
 	wg.Wait()
 }
@@ -213,6 +216,7 @@ func handleNetwork(config *Config, netStat *NetStatus, responseCh *ResponseChann
 	}
 
 	stop := false
+	done := false
 	var messages []*distributed.SyncMessage
 
 	for !stop {
@@ -225,9 +229,13 @@ func handleNetwork(config *Config, netStat *NetStatus, responseCh *ResponseChann
 		if netStat.IsHelper {
 			stop = netStat.CheckParentStop()
 		} else {
-			messages, stop = netStat.CheckHelpers()
+			messages, stop, done = netStat.CheckHelpers()
 			if len(messages) > 0 {
 				handleRemoteLogs(messages, config)
+			}
+
+			if done {
+				return
 			}
 		}
 	}
