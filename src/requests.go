@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -36,27 +38,7 @@ type Param struct {
 	Dict []string `yaml:"dict,omitempty"`
 }
 
-func httpRes2CustomRes(httpRes *http.Response) *Response {
-	res := new(Response)
-
-	res.Status = httpRes.StatusCode
-	body, err := io.ReadAll(httpRes.Body)
-
-	if err != nil {
-		return nil
-	}
-
-	res.Body = string(body)
-
-	// TODO: test this
-	for name, values := range httpRes.Header {
-		res.Headers[name] = strings.Join(values, ", ")
-	}
-
-	return res
-}
-
-func makeRequest(request Request, paramName string, paramValue string) *http.Response {
+func makeRequest(request Request, paramName string, paramValue string, ctx context.Context) *http.Response {
 	URL := strings.ReplaceAll(request.URL, fmt.Sprintf("$%s$", paramName), paramValue)
 	body := strings.ReplaceAll(request.Body, fmt.Sprintf("$%s$", paramName), paramValue)
 
@@ -78,6 +60,7 @@ func makeRequest(request Request, paramName string, paramValue string) *http.Res
 	if err != nil {
 		return nil
 	}
+	req = req.WithContext(ctx)
 
 	// Parse headers
 	for name, value := range request.Headers {
@@ -91,7 +74,6 @@ func makeRequest(request Request, paramName string, paramValue string) *http.Res
 		return nil
 	}
 
-	fmt.Printf("[%s: %s] %s\n", paramName, paramValue, res.Status)
 	return res
 }
 
@@ -105,6 +87,7 @@ func checkCriteria(response *http.Response, criteria *Response) bool {
 
 	if criteria.Body != "" {
 		body, err := io.ReadAll(response.Body)
+		response.Body = io.NopCloser(bytes.NewReader(body))
 
 		if err != nil {
 			return false

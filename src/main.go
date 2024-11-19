@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
+	"qdbf/distributed"
 	"strconv"
 	"strings"
 	"sync"
@@ -87,22 +89,31 @@ func start(config *Config, flags *Flags, paramNames []string, netStat *NetStatus
 			dict = splitWorkDict(netStat, config, flags, dict, paramNames[0])
 		}
 
-		runDict(config, flags, paramNames[0], dict)
+		runDict(config, flags, netStat, paramNames[0], dict)
 		return
 	}
 
 	fmt.Println("ERROR: No valid param type found, aborting")
 }
 
-func runDict(config *Config, flags *Flags, paramName string, dict []string) {
+func runDict(config *Config, flags *Flags, netStat *NetStatus, paramName string, dict []string) {
 	dictCount := len(dict)
 	batches := dictCount / flags.BatchSize
 	if batches < 1 {
 		batches = 1
 	}
 
+	stop := config.Criteria.Type == "STOP"
+	ctx, cancel := context.WithCancel(context.Background())
+	responseCh := new(ResponseChannel)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go handleNetwork(config, netStat, responseCh, ctx, cancel, &wg)
+
 	for i := 0; i < batches; i++ {
-		var waitGroup sync.WaitGroup
+		ch := make(chan *http.Response, min(flags.BatchSize, dictCount))
+		responseCh.Assign(ch)
 
 		batchStart := i * flags.BatchSize
 		batchEnd := (i + 1) * flags.BatchSize
@@ -111,17 +122,17 @@ func runDict(config *Config, flags *Flags, paramName string, dict []string) {
 		}
 
 		for _, elem := range dict[batchStart:batchEnd] {
-			waitGroup.Add(1)
-			go func(val string) {
-				fmt.Printf("[%s]: ", val)
-				makeRequest(config.Request, paramName, val)
-				waitGroup.Done()
-			}(elem)
+			go iterFunc(config, paramName, elem, responseCh, ctx)
 		}
 
-		waitGroup.Wait()
-	}
+		if handleResponses(responseCh, config, stop, ctx, cancel, netStat) {
+			return
+		}
 
+		config.Logger.Commit()
+		responseCh.Close()
+	}
+	cancel()
 }
 
 func runRange(config *Config, flags *Flags, netStat *NetStatus, paramName string, from int, to int) {
@@ -132,47 +143,138 @@ func runRange(config *Config, flags *Flags, netStat *NetStatus, paramName string
 	}
 
 	stop := config.Criteria.Type == "STOP"
+	ctx, cancel := context.WithCancel(context.Background())
+	responseCh := new(ResponseChannel)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go handleNetwork(config, netStat, responseCh, ctx, cancel, &wg)
 
 	iter := from
 	for batch := 1; batch <= batches; batch++ {
-		responseCh := make(chan *http.Response, min(flags.BatchSize, count))	
+		ch := make(chan *http.Response, min(flags.BatchSize, count))
+		responseCh.Assign(ch)
 
 		for ; iter <= to; iter++ {
-			go iterFunc(config, paramName, strconv.Itoa(iter), responseCh)
-			
+			go iterFunc(config, paramName, strconv.Itoa(iter), responseCh, ctx)
+
 			if iter%flags.BatchSize == 0 {
 				break
 			}
 		}
 
-		// TODO: Finish this
-		for i := 0; i < cap(responseCh); i++ {
-			res := <- responseCh
-	
-			if res != nil {
-				config.Logger.Add(res)
-	
-				if stop {
-					config.Logger.Commit()
-					fmt.Println("STOP STOP STOP")
-					return
-				}
-			}
+		if handleResponses(responseCh, config, stop, ctx, cancel, netStat) {
+			return
 		}
 
 		config.Logger.Commit()
+		responseCh.Close()
+	}
+	cancel()
+	wg.Wait()
+}
+
+func handleResponses(responseCh *ResponseChannel, config *Config, stop bool, ctx context.Context, cancel context.CancelFunc, netStat *NetStatus) bool {
+	for i := 0; i < cap(responseCh.Channel); i++ {
+		res, ok := <- responseCh.Channel
+		if !ok {
+			return true
+		}
+
+		select {
+		case <-ctx.Done():
+			return true
+		default:
+		}
+
+		if res != nil {
+			config.Logger.Add(res)
+
+			if stop {
+				cancel()
+				config.Logger.Commit()
+				responseCh.Close()
+
+				fmt.Println("STOP: Criteria met, stopping...")
+				netStat.NetStop()
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func handleNetwork(config *Config, netStat *NetStatus, responseCh *ResponseChannel, ctx context.Context, cancel context.CancelFunc, wg *sync.WaitGroup) {
+	defer wg.Done()
+	// No helpers active, no network communication
+	if !netStat.IsHelper && len(netStat.Helpers) == 0 {
+		return
+	}
+
+	stop := false
+	var messages []*distributed.SyncMessage
+
+	for !stop {
+		select {
+		case <-ctx.Done():
+			return
+		default:	
+		}
+
+		if netStat.IsHelper {
+			stop = netStat.CheckParentStop()
+		} else {
+			messages, stop = netStat.CheckHelpers()
+			if len(messages) > 0 {
+				handleRemoteLogs(messages, config)
+			}
+		}
+	}
+
+	cancel()
+	responseCh.Close()
+
+	fmt.Println("STOP: Recieved remote STOP signal!")
+
+	// If main instance, send message to all helpers
+	if !netStat.IsHelper {
+		netStat.NetStop()
 	}
 }
 
-func iterFunc(config *Config, paramName string, value string, channel chan *http.Response) {
-	res := makeRequest(config.Request, paramName, value)
+func handleRemoteLogs(messages []*distributed.SyncMessage, config *Config) {
+	for _, msg := range messages {
+		if msg.GetAction() == "LOG" {
+			for _, res := range msg.GetResponseLog().GetReponses() {
+				httpRes := res2httpRes(res)
+				config.Logger.Add(httpRes)
+			}
+		}
+	}
+}
+
+func iterFunc(config *Config, paramName string, value string, resChannel *ResponseChannel, ctx context.Context) {
+	res := makeRequest(config.Request, paramName, value, ctx)
+	if res == nil {
+		return
+	}
+
+	select {
+	case <-ctx.Done():
+		return
+	default:
+	}
+
 	ok := checkCriteria(res, &config.Criteria.Response)
 
-	if ok && config.Criteria.Type != "" {
-		channel <- res
+	if ok {
+		resChannel.Channel <- res
 	} else {
-		channel <- nil
+		resChannel.Channel <- nil
 	}
+
+	fmt.Printf("[%s: %s] %s\n", paramName, value, res.Status)
 }
 
 func splitWorkRange(netStat *NetStatus, config *Config, flags *Flags, param *Param, paramName string) {

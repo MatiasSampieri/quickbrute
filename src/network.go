@@ -13,12 +13,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-type NetStatus struct {
-	IsHelper  bool
-	Helpers   []net.Conn
-	Parent    net.Conn
-}
-
 func checkSync(conn net.Conn, timeout time.Duration) *distributed.SyncMessage {
 	if timeout == time.Duration(0) {
 		conn.SetReadDeadline(time.Time{})
@@ -90,10 +84,6 @@ func waitForMainInstance(port int) net.Conn {
 	}
 
 	return conn
-}
-
-func sendStop() {
-	// TODO: implement
 }
 
 func waitForRemoteStart(conn net.Conn, flags *Flags) *Config {
@@ -273,10 +263,12 @@ func sendLog(conn net.Conn, responses []*http.Response) {
 		body, _ := io.ReadAll(res.Body)
 
 		convertedResponses[i] = &distributed.Response{
-			Status: int32(res.StatusCode),
-			StatusTxt: res.Status,
-			ProtoVer: res.Proto,
-			Body: string(body),
+			Status:        int32(res.StatusCode),
+			StatusTxt:     res.Status,
+			ProtoVer:      res.Proto,
+			Body:          string(body),
+			Headers:       make(map[string]string),
+			ContentLength: res.ContentLength,
 		}
 
 		for name, value := range res.Header {
@@ -284,13 +276,36 @@ func sendLog(conn net.Conn, responses []*http.Response) {
 		}
 	}
 
-	logMessage := distributed.SyncMessage {
+	logMessage := distributed.SyncMessage{
 		Action: "LOG",
 		ResponseLog: &distributed.Log{
-			Count: count,
+			Count:    count,
 			Reponses: convertedResponses,
 		},
 	}
 
 	sendSync(conn, &logMessage)
+}
+
+func res2httpRes(res *distributed.Response) *http.Response {
+	httpRes := new(http.Response)
+	httpRes.Status = res.GetStatusTxt()
+	httpRes.StatusCode = int(res.GetStatus())
+	httpRes.Body = io.NopCloser(strings.NewReader(res.Body))
+	httpRes.Proto = res.ProtoVer
+	httpRes.ContentLength = res.ContentLength
+	httpRes.Header = make(http.Header)
+
+	// TODO: Actually get the propper protocol, but this will do for now
+	httpRes.ProtoMajor = 1
+	httpRes.ProtoMinor = 1
+
+	// TODO: test this!
+	for name, value := range res.Headers {
+		for _, subVal := range strings.Split(value, ", ") {
+			httpRes.Header.Add(name, subVal)
+		}
+	}
+
+	return httpRes
 }

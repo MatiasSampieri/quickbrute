@@ -71,6 +71,7 @@ func (logger *LocalLogger) Add(res *http.Response) {
 
 	raw, err := httputil.DumpResponse(res, true)
 	if err != nil {
+		fmt.Println("ERROR: _____________" + err.Error())
 		fmt.Println("ERROR: Couldn't log response, skipping it")
 		return
 	}
@@ -95,9 +96,9 @@ func (logger *LocalLogger) Dispose() {
 
 //// Not in interface
 func (logger *LocalLogger) BeginLog() {
-	logger.FilePtr.WriteString("============================ [START OF SESSION] ============================\n")
+	logger.FilePtr.WriteString("\n========================= [START OF SESSION] =========================\n")
 }
 
 func (logger *LocalLogger) EndLog() {
-	logger.FilePtr.WriteString("============================= [END OF SESSION] =============================\n")
+	logger.FilePtr.WriteString("========================== [END OF SESSION] ==========================\n")
 }

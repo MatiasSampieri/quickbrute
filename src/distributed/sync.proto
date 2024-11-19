@@ -28,7 +28,8 @@ message Response {
     string statusTxt = 2;
     string body = 3;
     string protoVer = 4;
-    map<string, string> headers = 5;
+    int64 contentLength = 5;
+    map<string, string> headers = 6;
 }
 
 message Log {
