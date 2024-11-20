@@ -291,6 +291,9 @@ func iterFunc(config *Config, paramName string, value string, resChannel *Respon
 		resChannel.Channel <- nil
 	}
 
+	if ok {
+		fmt.Printf("MEETS CRITERIA: ")
+	}
 	fmt.Printf("[%s: %s] %s\n", paramName, value, res.Status)
 }
 
