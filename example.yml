@@ -3,24 +3,16 @@ request:
   url: http://test/$prodid$
   params:
     username: Test
-    password: lol
-    id: "$id$"
+    password: abc
   headers:
     cookie: "sessionid=ab3235bac5"
-  body: '{"user":"test", "bruh":55}'
+  body: '{"user":"test", "g":55}'
 
 params:
   prodid:
     type: RANGE
     from: 1
     to: 10000
-  id:
-    type: RANGE
-    from: 1
-    to: 333
-  bruh:
-    type: DICTIONARY
-    file: dict.txt
 
 criteria:
   type: STOP | LOG

@@ -49,6 +49,7 @@ func (netStat *NetStatus) CheckParentStop() bool {
 	return msg.GetAction() == "STOP"
 }
 
+// Deprecated 
 func (netStat *NetStatus) WaitForDone() {
 	if !netStat.IsHelper && len(netStat.Helpers) > 0 {
 		fmt.Println("Waiting for helpers to finish...")

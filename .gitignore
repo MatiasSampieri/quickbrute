@@ -1,3 +1,4 @@
 *.exe
 *.log
 test*
+.DS_Store
