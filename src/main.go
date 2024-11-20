@@ -77,6 +77,10 @@ func start(config *Config, flags *Flags, paramNames []string, netStat *NetStatus
 
 		lines := strings.Split(string(data), "\n")
 
+		for i, line := range lines {
+			lines[i] = strings.Trim(line, "\r")
+		}
+
 		firstParam.Dict = lines
 		firstParam.Type = "DICT"
 	}
