@@ -227,13 +227,18 @@ func handleNetwork(config *Config, netStat *NetStatus, responseCh *ResponseChann
 
 	stop := false
 	done := false
+	msg := false
 	var messages []*distributed.SyncMessage
 
 	for !stop {
 		select {
 		case <-ctx.Done():
-			if !stop {
-				netStat.WaitForDone()
+			if !stop && len(netStat.Helpers) > 0 {
+				if !msg {
+					fmt.Println("Waiting for helpers to finish...")
+					msg = true
+				}
+				break
 			}
 			return
 		default:	
