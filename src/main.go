@@ -182,6 +182,7 @@ func runRange(config *Config, flags *Flags, netStat *NetStatus, paramName string
 		fmt.Println("BATCH: Batch ended!")
 	}
 
+	netStat.SendDone()
 	cancel()
 	wg.Wait()
 }
@@ -231,6 +232,9 @@ func handleNetwork(config *Config, netStat *NetStatus, responseCh *ResponseChann
 	for !stop {
 		select {
 		case <-ctx.Done():
+			if !stop {
+				netStat.WaitForDone()
+			}
 			return
 		default:	
 		}
