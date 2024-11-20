@@ -146,8 +146,8 @@ func runDict(config *Config, flags *Flags, netStat *NetStatus, paramName string,
 func runRange(config *Config, flags *Flags, netStat *NetStatus, paramName string, from int, to int) {
 	count := to - from
 	batches := count / flags.BatchSize
-	if batches < 1 {
-		batches = 1
+	if count % flags.BatchSize > 0 {
+		batches++
 	}
 
 	stop := config.Criteria.Type == "STOP"
