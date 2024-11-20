@@ -3,11 +3,11 @@
 Una herramienta simple para realizar ataques de fuerza bruta distribuidos.
 
 ## Flags
--b \<cantidad> (500) Cantidad de peticiones en paralelo (reducir si el programa crashea)
+`-b <cantidad>` (500) Cantidad de peticiones en paralelo (reducir si el programa crashea)
 
--o \<nombre archivo> (out.log) Archivo de salida de peticiones que cumplen con el criterio 
+`-o <nombre archivo>` (out.log) Archivo de salida de peticiones que cumplen con el criterio 
 
--p \<puerto> (7575) Puerto para la comunicacion entre helpers e instancia principal
+`-p <puerto>` (7575) Puerto para la comunicacion entre helpers e instancia principal
 
 ## Uso 
 
