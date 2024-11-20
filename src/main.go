@@ -116,6 +116,7 @@ func runDict(config *Config, flags *Flags, netStat *NetStatus, paramName string,
 	go handleNetwork(config, netStat, responseCh, ctx, cancel, &wg)
 
 	for i := 0; i < batches; i++ {
+		fmt.Println("BATCH: Batch started!")
 		ch := make(chan *http.Response, min(flags.BatchSize, dictCount))
 		responseCh.Assign(ch)
 
@@ -135,6 +136,7 @@ func runDict(config *Config, flags *Flags, netStat *NetStatus, paramName string,
 
 		config.Logger.Commit()
 		responseCh.Close()
+		fmt.Println("BATCH: Batch ended!")
 	}
 
 	cancel()
@@ -158,6 +160,7 @@ func runRange(config *Config, flags *Flags, netStat *NetStatus, paramName string
 
 	iter := from
 	for batch := 1; batch <= batches; batch++ {
+		fmt.Println("BATCH: Batch started!")
 		ch := make(chan *http.Response, min(flags.BatchSize, count))
 		responseCh.Assign(ch)
 
@@ -165,6 +168,7 @@ func runRange(config *Config, flags *Flags, netStat *NetStatus, paramName string
 			go iterFunc(config, paramName, strconv.Itoa(iter), responseCh, ctx)
 
 			if iter%flags.BatchSize == 0 {
+				iter++
 				break
 			}
 		}
@@ -175,6 +179,7 @@ func runRange(config *Config, flags *Flags, netStat *NetStatus, paramName string
 
 		config.Logger.Commit()
 		responseCh.Close()
+		fmt.Println("BATCH: Batch ended!")
 	}
 
 	cancel()
